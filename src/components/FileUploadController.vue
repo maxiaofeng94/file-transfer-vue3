@@ -9,22 +9,22 @@
     <div class="firstContainer">
       <div class="fileName">文件名称</div>
       <div class="operatePanel">
-        <van-button size="mini" title="暂停" @click="puaseUpload" v-if="isUpload && !isStop">
-          <template #icon>
-            <icon-codicon-debug-pause class="iconify"></icon-codicon-debug-pause>
-          </template>
-        </van-button>
-        <van-button size="mini" title="开始" @click="startUpload" v-if="isPause && !isStop || isInit">
+        <van-button size="mini" title="开始" @click="startUpload" v-if="isShowStartBtn">
           <template #icon>
             <icon-codicon-debug-start class="iconify"></icon-codicon-debug-start>
           </template>
         </van-button>
-        <van-button size="mini" title="停止" @click="stopUpload" v-if="isUpload || isPause">
+        <van-button size="mini" title="暂停" @click="puaseUpload" v-if="isShowPauseBtn">
+          <template #icon>
+            <icon-codicon-debug-pause class="iconify"></icon-codicon-debug-pause>
+          </template>
+        </van-button>
+        <van-button size="mini" title="停止" @click="stopUpload" v-if="isShowStopBtn">
           <template #icon>
             <icon-codicon-debug-stop class="iconify"></icon-codicon-debug-stop>
           </template>
         </van-button>
-        <van-button size="mini" title="重新开始" @click="restartUpload" v-if="isStop">
+        <van-button size="mini" title="重新开始" @click="restartUpload" v-if="isShwoRestartBtn">
           <template #icon>
             <icon-codicon-debug-restart class="iconify"></icon-codicon-debug-restart>
           </template>
@@ -32,12 +32,15 @@
       </div>
     </div>
     <div class="progressDiv">
-      <van-progress></van-progress>
+      <van-progress :percentage="progress" :pivot-text="`${progressTxt}${progress}%`"></van-progress>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-  import {ref, computed} from 'vue'
+  import {ref} from 'vue'
+  import useUploadStatus from '@/hooks/useUploadStatus';
+  import { FileUploadStatusEnum } from '@/enums/file-enum';
+  import {calSHA256} from '@/utils/fileHash'
 
   defineOptions({
     name: "FileUploadController"
@@ -45,48 +48,44 @@
 
   let props = defineProps<{'isAutoUpload'?: boolean}>()
   
+  const {uploadStatus, isShowStartBtn, isShowPauseBtn, isShowStopBtn, isShwoRestartBtn} = useUploadStatus()
+
   /**
    * 当前组件操作的文件对象
    */
   let fileObj:File
-  /**
-   * 当前是否处于上传文件中
-   */
-  let isUpload = ref(false)
-  /**
-   * 当前是否处于上传暂停
-   */
-  let isPause = ref(false)
-  /**
-   * 当前是否处于上传停止
-   */
-  let isStop = ref(false)
-  /**
-   * 当前是否处于上传初始化状态
-   * 即刚拿到文件对象，还未进行任何操作时的状态
-   */
-  let isInit = computed(() => !isUpload.value && !isPause.value && !isStop.value)
-
+  let progress = ref(0)
+  let progressTxt = ref("")
   
   const startUpload = () => {
-    isPause.value = false
-    isStop.value = false
-    isUpload.value = true
-  }
-  const restartUpload = () => {
-    isPause.value = false
-    isStop.value = false
-    isUpload.value = true
+    if(uploadStatus.value == FileUploadStatusEnum.INIT){
+      uploadStatus.value = FileUploadStatusEnum.CALCHASH
+      progress.value = 0
+      progressTxt.value = '哈希值计算'
+      calSHA256(fileObj, num => progress.value = Math.round(num * 10) / 10)
+        .then((fileHashCode) => {
+          console.log(fileHashCode)
+          uploadStatus.value = FileUploadStatusEnum.UPLOAD
+          progress.value = 0
+          progressTxt.value = '文件上传'
+        })
+        .catch(() => {
+          uploadStatus.value = FileUploadStatusEnum.STOP
+        })
+    }else{
+      uploadStatus.value = FileUploadStatusEnum.UPLOAD
+      progress.value = 0
+      progressTxt.value = '文件上传'
+    }
   }
   const puaseUpload = () => {
-    isPause.value = true
-    isStop.value = false
-    isUpload.value = false
+    uploadStatus.value = FileUploadStatusEnum.PAUSE
   }
   const stopUpload = () => {
-    isPause.value = false
-    isStop.value = true
-    isUpload.value = false
+    uploadStatus.value = FileUploadStatusEnum.STOP
+  }
+  const restartUpload = () => {
+    uploadStatus.value = FileUploadStatusEnum.UPLOAD
   }
 
   /**
@@ -95,9 +94,7 @@
    */
   const setFileObj = (file: File) => {
     fileObj = file
-    isPause.value = false
-    isStop.value = false
-    isUpload.value = false
+    uploadStatus.value = FileUploadStatusEnum.INIT
   }
 
   defineExpose({setFileObj})

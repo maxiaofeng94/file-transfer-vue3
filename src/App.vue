@@ -3,12 +3,12 @@ import FileUploadController from './components/FileUploadController.vue';
 import {ref} from 'vue'
 
 let controller = ref()
-console.log(controller)
 
 const handleFileChange = (event: Event) =>{
   let files = (event.target as HTMLInputElement).files
   if(files != null){
-    controller.value.setFileObj(files[0])
+    let file = files[0]
+    controller.value.setFileObj(file)
   }
 }
 </script>
