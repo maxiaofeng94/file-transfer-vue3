@@ -62,15 +62,14 @@ class Http {
             NProgress.done();
           }
           // 与后端协定的返回字段
-          const { code, result } = response.data;
+          const { code, data } = response.data;
           const { message } = response.data;
           // 判断请求是否成功
           const isSuccess =
-            result &&
             Reflect.has(response.data, "code") &&
             code === ResultEnum.SUCCESS;
           if (isSuccess) {
-            return result;
+            return data;
           } else {
             // 处理请求错误
             if(isShowToast){
@@ -80,7 +79,9 @@ class Http {
           }
         },
         (error: AxiosError) => {
-          const { isShowProgress, isShowToast } = error.config as MyAxiosRequestConfig
+          const { isShowProgress, isShowToast } = error.config ? 
+            error.config as MyAxiosRequestConfig : 
+            {isShowProgress: true, isShowToast: true}
 
           if(isShowProgress){
             NProgress.done();

@@ -14,7 +14,9 @@ export enum ContentTypeEnum {
  * @description: 与后端协定的状态 code
  */
 export enum ResultEnum {
-  SUCCESS = 0,
-  ERROR = 1
+  SUCCESS = 1000,
+  FAILED = 1001,
+  VALIDATE_FAILED = 1002,
+  ERROR = 5000
 }
   

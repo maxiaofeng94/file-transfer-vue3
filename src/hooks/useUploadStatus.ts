@@ -12,7 +12,7 @@ export default function useUploadStatus(){
   /**
    * 文件上传状态
    */
-  let uploadStatus = ref(FileUploadStatusEnum.INIT)
+  let uploadStatus = ref(FileUploadStatusEnum.NONE)
 
   /**
    * 是否展示开始按钮
