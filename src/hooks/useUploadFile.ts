@@ -4,10 +4,11 @@
  * @author: feng 
  * @date: 2025-04-02 17:23:44 
  */
-import {ref} from 'vue'
-import {http} from '@/utils/http'
+import { ref, watch } from 'vue'
+import { http, type MyAxiosRequestConfig } from '@/utils/http'
 import { ContentTypeEnum } from '@/enums/request-enum'
-import {calBlobSHA256} from '@/utils/fileHash'
+import { calBlobSHA256 } from '@/utils/fileHash'
+import { FileUploadOpEnum } from '@/enums/file-enum'
 
 export default function useUploadFile(){
   /**
@@ -30,6 +31,13 @@ export default function useUploadFile(){
      * 中止文件上传
      */
     stop: 'file/stop'
+  }
+  /**
+   * 调用接口时的配置参数
+   */
+  const uploadConfig: MyAxiosRequestConfig = {
+    isShowToast: true,
+    isShowProgress: false
   }
   
   /**
@@ -61,9 +69,13 @@ export default function useUploadFile(){
    */
   let hashCode: string
   /**
-   * 当前是否暂停上传
+   * 当前执行上传操作类型
    */
-  let isPause: boolean = false
+  let uploadOp: FileUploadOpEnum = FileUploadOpEnum.NONE
+  /**
+   * 当前是否正在上传中
+   */
+  let isUploading = ref(false)
 
   /**
    * 开始上传文件
@@ -71,8 +83,9 @@ export default function useUploadFile(){
    * @param file 文件对象
    * @param fileHashCode 文件哈希值
    */
-  const start = async (file?: File, fileHashCode?: string): Promise<string> => {
-    isPause = false
+  const startUploadFile = async (file?: File, fileHashCode?: string): Promise<string> => {
+    uploadOp = FileUploadOpEnum.START
+    isUploading.value = true
 
     let uploadResult = false
 
@@ -84,7 +97,8 @@ export default function useUploadFile(){
       }
       uploadProgress.value = 0
 
-      const data = await http.get<any, any>(uploadUrls.getStatus, {fileHashCode: hashCode, fileName: fileObj.name})
+      const data = await http.get<any, any>(uploadUrls.getStatus, 
+        {fileHashCode: hashCode, fileName: fileObj.name}, uploadConfig)
       // 已存在同样哈希值的文件，不用再重新上传
       if(data.status == 1){
         uploadProgress.value = 100
@@ -106,7 +120,8 @@ export default function useUploadFile(){
     }
 
     //合并文件
-    const fileId = await http.post<string, any>(uploadUrls.merge, {transferId: transferId, fileHashCode: hashCode, fileName: fileObj.name})
+    const fileId = await http.post<string, any>(uploadUrls.merge, 
+      {transferId: transferId, fileHashCode: hashCode, fileName: fileObj.name}, uploadConfig)
     uploadProgress.value = 100
 
     return fileId
@@ -123,7 +138,8 @@ export default function useUploadFile(){
     const progerssPerChunk = 99 / chunks
 
     for(let i = startChunkNum; i < chunks; i+=uploadConcurrency){
-      if(isPause){
+      if(uploadOp !== FileUploadOpEnum.START){
+        isUploading.value = false
         return false
       }
 
@@ -143,7 +159,7 @@ export default function useUploadFile(){
           http.post(uploadUrls.uploadBlock, 
             {file: chunk, transferId: transferId, blockNum: j + 1, 
               blockHashCode: chunkHashCode, fileHashCode: hashCode}, 
-            {headers:{"Content-Type": ContentTypeEnum.FORM_DATA}}
+            { headers:{"Content-Type": ContentTypeEnum.FORM_DATA}, ...uploadConfig}
           ).then(() => {
             // 更新上传文件进度（在每个请求执行完成后更新进度，可以让进度条显示更加顺滑）
             uploadProgress.value += progerssPerChunk
@@ -162,19 +178,39 @@ export default function useUploadFile(){
   /**
    * 暂停上传文件
    */
-  const pause = () => {
-    isPause = true
+  const pauseUploadFile = () => {
+    uploadOp = FileUploadOpEnum.PAUSE
   }
 
   /**
    * 停止上传文件
    */
+  const stopUploadFile = () => {
+    uploadOp = FileUploadOpEnum.STOP
+    
+    // 如果当前已经不是上传状态，则执行停止逻辑；
+    // 否则则需在watch中等待停止上传后，再执行停止逻辑
+    if(!isUploading.value){
+      stop()
+    }
+  }
+
+  watch(isUploading, (newVal, oldVal) => {
+    // 执行停止操作后，需要等待当前不在上传状态时，才执行停止操作相关逻辑
+    if(!newVal && uploadOp === FileUploadOpEnum.STOP){
+      stop()
+    }
+  })
+
+  /**
+   * 停止上传文件时执行的操作逻辑
+   */
   const stop = () => {
-    http.post(uploadUrls.stop, {transferId: transferId, fileHashCode: hashCode})
+    http.post(uploadUrls.stop, {transferId: transferId, fileHashCode: hashCode}, uploadConfig)
 
     transferId = ''
     uploadProgress.value = 0
   }
 
-  return {uploadProgress, startUploadFile: start, pauseUploadFile: pause, stopUploadFile: stop}
+  return {uploadProgress, startUploadFile, pauseUploadFile, stopUploadFile}
 }

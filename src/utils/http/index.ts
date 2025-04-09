@@ -9,7 +9,7 @@ import NProgress from "../progress";
 import { showFailToast } from "vant";
 import "vant/es/toast/style";
 
-interface MyAxiosRequestConfig extends AxiosRequestConfig{
+export interface MyAxiosRequestConfig extends AxiosRequestConfig{
   isShowToast?: boolean,
   isShowProgress?: boolean
 }

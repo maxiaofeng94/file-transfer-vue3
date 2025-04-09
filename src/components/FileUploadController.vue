@@ -14,7 +14,7 @@
             <icon-codicon-debug-start class="iconify"></icon-codicon-debug-start>
           </template>
         </van-button>
-        <van-button size="mini" title="暂停" @click="puaseUpload" v-if="isShowPauseBtn">
+        <van-button size="mini" title="暂停" @click="pauseUpload" v-if="isShowPauseBtn">
           <template #icon>
             <icon-codicon-debug-pause class="iconify"></icon-codicon-debug-pause>
           </template>
@@ -37,17 +37,33 @@
   </div>
 </template>
 <script setup lang="ts">
-  import {ref, computed} from 'vue'
+  import { ref, computed } from 'vue'
   import useUploadStatus from '@/hooks/useUploadStatus';
   import useUploadFile from '@/hooks/useUploadFile';
-  import { FileUploadStatusEnum } from '@/enums/file-enum';
-  import {calSHA256} from '@/utils/fileHash'
+  import { FileUploadStatusEnum, FileUploadOpEnum } from '@/enums/file-enum';
+  import { calSHA256 } from '@/utils/fileHash'
+  import { showConfirmDialog } from 'vant';
+  import 'vant/es/dialog/style';
 
   defineOptions({
     name: "FileUploadController"
   })
 
-  let props = defineProps<{'isAutoUpload'?: boolean}>()
+  /**
+   * 定义组件参数：
+   * isAutoUpload，设置操作文件对象后是否自动开始上传操作
+   * isShowConfirm，点击上传控制按钮时是否显示确认弹窗
+   */
+  let props = defineProps<{'isAutoUpload'?: boolean, 'isShowConfirm'?: boolean}>()
+  /**
+   * 定义组件事件
+   * beforeControl，文件上传控制（如开始、暂停、继续、停止、重新上传等）操作执行前事件，传入参数：控制操作类型
+   * controlled，文件上传控制操作执行后事件，传入参数：控制操作类型
+   * fileHashCodeCalculated，文件哈希值计算完成事件，传入参数：文件哈希值
+   * fileUploadSucceed，文件上传成功事件，传入参数：文件Id值
+   * fileUploadFailed，文件上传失败事件，传入参数：无
+   */
+  const emit = defineEmits(['beforeControl', 'controlled', 'fileHashCodeCalculated', 'fileUploadSucceed', 'fileUploadFailed'])
   
   const {uploadStatus, isShowStartBtn, isShowPauseBtn, isShowStopBtn, isShwoRestartBtn} = useUploadStatus()
   const {uploadProgress, startUploadFile, pauseUploadFile, stopUploadFile} = useUploadFile()
@@ -75,36 +91,121 @@
   
   const startUpload = () => {
     if(uploadStatus.value == FileUploadStatusEnum.INIT){
-      uploadStatus.value = FileUploadStatusEnum.CALCHASH
-      calcProgress.value = 0
-      progressTxt.value = '哈希值计算'
-      calSHA256(fileObj, num => calcProgress.value = num)
-        .then((fileHashCode) => {
-          uploadStatus.value = FileUploadStatusEnum.UPLOAD
-          progressTxt.value = '文件上传'
-          startUploadFile(fileObj, fileHashCode).then(uploadSuccess).catch(uploadError)
-        })
-        .catch((err) => {
-          console.error(err)
-          uploadStatus.value = FileUploadStatusEnum.INIT
-        })
+      emit('beforeControl', { opType: FileUploadOpEnum.START })
+      if(props.isShowConfirm){
+        showOpConfirm(FileUploadOpEnum.START, startOp)
+      }else{
+        startOp()
+      }
     }else{
-      uploadStatus.value = FileUploadStatusEnum.UPLOAD
-      progressTxt.value = '文件上传'
-      startUploadFile().then(uploadSuccess).catch(uploadError)
+      emit('beforeControl', { opType: FileUploadOpEnum.CONTINUE })
+      if(props.isShowConfirm){
+        showOpConfirm(FileUploadOpEnum.CONTINUE, continueOp)
+      }else{
+        continueOp()
+      }
     }
   }
-  const puaseUpload = () => {
+  const startOp = () => {
+    uploadStatus.value = FileUploadStatusEnum.CALCHASH
+    calcProgress.value = 0
+    progressTxt.value = '哈希值计算'
+    calSHA256(fileObj, num => calcProgress.value = num)
+      .then((fileHashCode) => {
+        emit('fileHashCodeCalculated', { fileHashCode })
+
+        uploadStatus.value = FileUploadStatusEnum.UPLOAD
+        progressTxt.value = '文件上传'
+        startUploadFile(fileObj, fileHashCode).then(uploadSuccess).catch(uploadError)
+      })
+      .catch((err) => {
+        console.error(err)
+        uploadStatus.value = FileUploadStatusEnum.INIT
+
+        emit('fileUploadFailed')
+      })
+
+    emit('controlled', { opType: FileUploadOpEnum.START })
+  }
+  const continueOp = () => {
+    uploadStatus.value = FileUploadStatusEnum.UPLOAD
+    progressTxt.value = '文件上传'
+    startUploadFile().then(uploadSuccess).catch(uploadError)
+    emit('controlled', { opType: FileUploadOpEnum.CONTINUE })
+  }
+
+  const pauseUpload = () => {
+    emit('beforeControl', { opType: FileUploadOpEnum.PAUSE })
+    if(props.isShowConfirm){
+      showOpConfirm(FileUploadOpEnum.PAUSE, pauseOp)
+    }else{
+      pauseOp()
+    }
+  }
+  const pauseOp = () => {
     uploadStatus.value = FileUploadStatusEnum.PAUSE
     pauseUploadFile()
+
+    emit('controlled', { opType: FileUploadOpEnum.PAUSE })
   }
+
   const stopUpload = () => {
+    emit('beforeControl', { opType: FileUploadOpEnum.STOP })
+    if(props.isShowConfirm){
+      showOpConfirm(FileUploadOpEnum.STOP, stopOp)
+    }else{
+      stopOp()
+    }
+  }
+  const stopOp = () => {
     uploadStatus.value = FileUploadStatusEnum.STOP
     stopUploadFile()
+
+    emit('controlled', { opType: FileUploadOpEnum.STOP })
   }
+
   const restartUpload = () => {
+    emit('beforeControl', { opType: FileUploadOpEnum.RESTART })
+    if(props.isShowConfirm){
+      showOpConfirm(FileUploadOpEnum.RESTART, restartOp)
+    }else{
+      restartOp()
+    }
+  }
+  const restartOp = () => {
     uploadStatus.value = FileUploadStatusEnum.UPLOAD
     startUploadFile().then(uploadSuccess).catch(uploadError)
+
+    emit('controlled', { opType: FileUploadOpEnum.RESTART })
+  }
+
+  const showOpConfirm = (opType: FileUploadOpEnum, confirmCallback: ()=>void) => {
+    let msg = ''
+    switch(opType){
+      case FileUploadOpEnum.START:
+        msg = '开始'
+        break
+      case FileUploadOpEnum.PAUSE:
+        msg = '暂停'
+        break
+      case FileUploadOpEnum.CONTINUE:
+        msg = '继续'
+        break
+      case FileUploadOpEnum.STOP:
+        msg = '停止'
+        break
+      case FileUploadOpEnum.RESTART:
+        msg = '重新开始'
+        break
+    }
+
+    showConfirmDialog({
+      title: '文件上传',
+      message: '是否确认 ' + msg + ' ?',
+    }).then(confirmCallback)
+    .catch(()=>{
+      console.debug('取消了 ' + msg + ' 操作')
+    })
   }
 
   /**
@@ -112,16 +213,23 @@
    * @param fileId 文件Id
    */
   const uploadSuccess = (fileId: string) => {
+    // 只有fileId不为空字符串时，才表示真正上传成功；否则可能是暂停操作引起此回调函数调用
     if(fileId && fileId.length > 0){
       console.log(fileId)
       uploadStatus.value = FileUploadStatusEnum.SUCCESS
-    }else{
-      console.log("执行了暂停操作")
+
+      emit('fileUploadSucceed', { fileId })
     }
   }
+  /**
+   * 文件上传失败回调函数
+   * @param err 报错信息
+   */
   const uploadError = (err:any) => {
     console.error(err)
     uploadStatus.value = FileUploadStatusEnum.STOP
+
+    emit('fileUploadFailed')
   }
 
   /**
@@ -142,6 +250,12 @@
     fileObj = file
     fileName.value = file.name
     uploadStatus.value = FileUploadStatusEnum.INIT
+
+    // 如果设置了自动上传，则立即触发开始操作
+    if(props.isAutoUpload){
+      startUpload()
+    }
+
     return true
   }
 

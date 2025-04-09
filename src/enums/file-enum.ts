@@ -46,3 +46,33 @@ export enum FileUploadStatusEnum {
    */
   SUCCESS
 }
+
+/**
+ * 文件上传操作类型
+ */
+export enum FileUploadOpEnum {
+  /**
+   * 无操作
+   */
+  NONE,
+  /**
+   * 开始上传操作
+   */
+  START,
+  /**
+   * 暂停上传操作
+   */
+  PAUSE,
+  /**
+   * 停止上传操作
+   */
+  STOP,
+  /**
+   * 继续上传操作
+   */
+  CONTINUE,
+  /**
+   * 重新上传操作
+   */
+  RESTART
+}
